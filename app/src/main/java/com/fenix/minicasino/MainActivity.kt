@@ -2,6 +2,7 @@ package com.fenix.minicasino
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.SharedPreferences
@@ -13,11 +14,13 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -119,10 +122,12 @@ class MainActivity : AppCompatActivity() {
         val btnRuleta = crearBoton("🎰 Ruleta", View.OnClickListener { mostrarRuleta() })
         val btnRasca = crearBoton("🎟️ Rasca y Gana", View.OnClickListener { mostrarRasca() })
         val btnBlackjack = crearBoton("🃏 Blackjack", View.OnClickListener { mostrarBlackjack() })
+        val btnRuletaCasino = crearBoton("🎱 Ruleta Casino", View.OnClickListener { mostrarRuletaCasino() })
 
         layout.addView(btnRuleta)
         layout.addView(btnRasca)
         layout.addView(btnBlackjack)
+        layout.addView(btnRuletaCasino)
 
         contenedorJuegos.addView(layout)
     }
@@ -467,5 +472,132 @@ class MainActivity : AppCompatActivity() {
         actualizarManos(tvJugador, tvBanca, revelarBanca = true)
         guardarPuntos()
         actualizarPuntos()
+    }
+
+    // ---------- RUETA CASINO ----------
+    private fun mostrarRuletaCasino() {
+        contenedorJuegos.removeAllViews()
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setBackgroundColor(colorFondo)
+        layout.setPadding(20, 20, 20, 20)
+
+        // Texto de resultado
+        val tvResultado = TextView(this)
+        tvResultado.text = "Resultado: -"
+        tvResultado.setTextColor(Color.WHITE)
+        tvResultado.setTypeface(null, Typeface.BOLD)
+        tvResultado.textSize = 28f
+        tvResultado.gravity = Gravity.CENTER
+        tvResultado.setPadding(16, 16, 16, 16)
+        tvResultado.background = crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3)
+        val lpResultado = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        lpResultado.setMargins(0, 0, 0, 24)
+        tvResultado.layoutParams = lpResultado
+
+        // Selección de color
+        var colorSeleccionado: String? = null
+        val layoutColores = LinearLayout(this)
+        layoutColores.orientation = LinearLayout.HORIZONTAL
+        layoutColores.gravity = Gravity.CENTER
+
+        val btnRojo = crearBoton("Rojo", View.OnClickListener {
+            colorSeleccionado = "Rojo"
+        })
+        btnRojo.background = crearFondoRedondeado(Color.parseColor("#C41E3A"))
+        val btnNegro = crearBoton("Negro", View.OnClickListener {
+            colorSeleccionado = "Negro"
+        })
+        btnNegro.background = crearFondoRedondeado(Color.BLACK)
+        val btnVerde = crearBoton("Verde", View.OnClickListener {
+            colorSeleccionado = "Verde"
+        })
+        btnVerde.background = crearFondoRedondeado(Color.parseColor("#00FF00"))
+
+        val paramsBtn = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        paramsBtn.setMargins(8, 0, 8, 0)
+        btnRojo.layoutParams = paramsBtn
+        btnNegro.layoutParams = paramsBtn
+        btnVerde.layoutParams = paramsBtn
+
+        layoutColores.addView(btnRojo)
+        layoutColores.addView(btnNegro)
+        layoutColores.addView(btnVerde)
+
+        // EditText para número
+        val etNumero = EditText(this)
+        etNumero.hint = "Número (0-11)"
+        etNumero.inputType = InputType.TYPE_CLASS_NUMBER
+        etNumero.setTextColor(Color.WHITE)
+        etNumero.setHintTextColor(Color.LTGRAY)
+        etNumero.background = crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3)
+        etNumero.setPadding(16, 16, 16, 16)
+        val lpEdit = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        lpEdit.setMargins(0, 16, 0, 16)
+        etNumero.layoutParams = lpEdit
+
+        // Botón Girar
+        val btnGirarCasino = crearBoton("Girar", View.OnClickListener {
+            if (puntosUsuario < 15) {
+                Toast.makeText(this, "Sin puntos suficientes", Toast.LENGTH_SHORT).show()
+                return@OnClickListener
+            }
+            puntosUsuario -= 15
+            actualizarPuntos()
+
+            val numero = random.nextInt(12) // 0..11
+            val colorResultado = when {
+                numero == 0 -> "Verde"
+                numero % 2 == 0 -> "Rojo"
+                else -> "Negro"
+            }
+
+            // Actualizar UI del resultado
+            tvResultado.text = "Resultado: $numero"
+            val bgColor = when (colorResultado) {
+                "Rojo" -> Color.parseColor("#C41E3A")
+                "Negro" -> Color.BLACK
+                else -> Color.parseColor("#00FF00")
+            }
+            tvResultado.setBackgroundColor(bgColor)
+
+            // Calcular premios
+            var premio = 0
+            val numeroApostado = etNumero.text.toString().toIntOrNull()
+            if (numeroApostado != null && numeroApostado == numero) {
+                premio = 150
+                Toast.makeText(this, "¡Aciertas el número! +$premio puntos", Toast.LENGTH_SHORT).show()
+            } else if (colorSeleccionado != null && colorSeleccionado == colorResultado) {
+                premio = 30
+                Toast.makeText(this, "¡Aciertas el color! +$premio puntos", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "No acertaste, mejor suerte la próxima.", Toast.LENGTH_SHORT).show()
+            }
+
+            if (premio > 0) {
+                puntosUsuario += premio
+                guardarPuntos()
+                actualizarPuntos()
+            }
+
+            // Animación de rotación
+            val animator = ObjectAnimator.ofFloat(tvResultado, "rotation", 0f, 720f)
+            animator.duration = 1000
+            animator.start()
+        })
+
+        layout.addView(tvResultado)
+        layout.addView(layoutColores)
+        layout.addView(etNumero)
+        layout.addView(btnGirarCasino)
+        layout.addView(crearBotonVolver())
+
+        contenedorJuegos.addView(layout)
     }
 }
