@@ -41,6 +41,9 @@ class MainActivity : AppCompatActivity() {
     private val colorDorado = Color.parseColor("#D4AF37")
     private val colorFondoClaro = Color.parseColor("#1B2B4D")
 
+    // Botón girar de la ruleta
+    private lateinit var btnGirar: Button
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -147,7 +150,8 @@ class MainActivity : AppCompatActivity() {
 
         val ruletaView = RuletaView(this)
 
-        val btnGirar = crearBoton("Girar", View.OnClickListener {
+        // Se asigna a la variable de clase btnGirar
+        btnGirar = crearBoton("Girar", View.OnClickListener {
             if (puntosUsuario < 10) {
                 Toast.makeText(this, "Sin puntos suficientes", Toast.LENGTH_SHORT).show()
                 return@OnClickListener
