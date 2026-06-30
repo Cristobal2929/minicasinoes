@@ -1,14 +1,22 @@
 package com.fenix.minicasino
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -71,7 +79,7 @@ class MainActivity : AppCompatActivity() {
         btn.text = texto
         btn.setTextColor(Color.WHITE)
         btn.setTypeface(null, Typeface.BOLD)
-        btn.setBackgroundDrawable(crearFondoRedondeado(colorAcento))
+        btn.background = crearFondoRedondeado(colorAcento)
         btn.setOnClickListener(onClick)
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -87,7 +95,7 @@ class MainActivity : AppCompatActivity() {
         btn.text = "← Volver"
         btn.setTextColor(colorDorado)
         btn.setTypeface(null, Typeface.BOLD)
-        btn.setBackgroundDrawable(crearFondoRedondeado(Color.TRANSPARENT, strokeColor = colorDorado, strokeWidth = 3))
+        btn.background = crearFondoRedondeado(Color.TRANSPARENT, strokeColor = colorDorado, strokeWidth = 3)
         btn.setOnClickListener { mostrarMenuPrincipal() }
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -137,28 +145,142 @@ class MainActivity : AppCompatActivity() {
         lpResult.setMargins(0, 0, 0, 24)
         tvResultado.layoutParams = lpResult
 
+        val ruletaView = RuletaView(this)
+
         val btnGirar = crearBoton("Girar", View.OnClickListener {
             if (puntosUsuario < 10) {
                 Toast.makeText(this, "Sin puntos suficientes", Toast.LENGTH_SHORT).show()
                 return@OnClickListener
             }
+            // Desactivar botón durante la animación
+            btnGirar.isEnabled = false
             puntosUsuario -= 10
-            val indice = random.nextInt(8)
+            actualizarPuntos()
+
+            val indice = random.nextInt(8) // 0..7
             val multiplicadores = arrayOf(0, 0, 0, 2, 2, 3, 5, 10)
             val mult = multiplicadores[indice]
-            val ganancia = 10 * mult
-            puntosUsuario += ganancia
-            guardarPuntos()
-            actualizarPuntos()
-            tvResultado.text = "Resultado: x$mult"
-            Toast.makeText(this, "¡Obtuviste x$mult!", Toast.LENGTH_SHORT).show()
+
+            ruletaView.girarA(indice) {
+                // Callback al terminar la animación
+                val ganancia = 10 * mult
+                puntosUsuario += ganancia
+                guardarPuntos()
+                actualizarPuntos()
+                tvResultado.text = "Resultado: x$mult"
+                Toast.makeText(this, "¡Obtuviste x$mult!", Toast.LENGTH_SHORT).show()
+                btnGirar.isEnabled = true
+            }
         })
 
+        // LayoutParams para la ruleta (peso 1 para ocupar el espacio restante)
+        val lpRuleta = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        )
+        ruletaView.layoutParams = lpRuleta
+
         layout.addView(tvResultado)
+        layout.addView(ruletaView)
         layout.addView(btnGirar)
         layout.addView(crearBotonVolver())
 
         contenedorJuegos.addView(layout)
+    }
+
+    // Clase personalizada para dibujar la ruleta
+    private inner class RuletaView(context: Context) : View(context) {
+
+        private var rotationAngle = 0f
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+        private val sectorCount = 8
+        private val sectorAngle = 360f / sectorCount
+        private val multiplicadores = arrayOf(0, 0, 0, 2, 2, 3, 5, 10)
+
+        // Colores
+        private val colorRojo = Color.parseColor("#C41E3A")
+        private val colorAzul = Color.parseColor("#1B2B4D")
+        private val colorBorde = Color.parseColor("#D4AF37")
+
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            val padding = 40f
+            rect.set(padding, padding, w - padding, h - padding)
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+
+            // Dibujar la rueda rotada
+            canvas.save()
+            canvas.rotate(rotationAngle, width / 2f, height / 2f)
+
+            for (i in 0 until sectorCount) {
+                // Fondo del sector
+                paint.style = Paint.Style.FILL
+                paint.color = if (i % 2 == 0) colorRojo else colorAzul
+                canvas.drawArc(rect, i * sectorAngle, sectorAngle, true, paint)
+
+                // Borde dorado
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 8f
+                paint.color = colorBorde
+                canvas.drawArc(rect, i * sectorAngle, sectorAngle, true, paint)
+
+                // Texto del multiplicador
+                paint.style = Paint.Style.FILL
+                paint.color = Color.WHITE
+                paint.textSize = (rect.width() / 8)
+                paint.textAlign = Paint.Align.CENTER
+
+                // Calcular posición del texto en el centro del sector
+                val angle = (i + 0.5f) * sectorAngle
+                val radius = rect.width() / 2f * 0.6f
+                val cx = width / 2f + radius * Math.cos(Math.toRadians(angle.toDouble())).toFloat()
+                val cy = height / 2f + radius * Math.sin(Math.toRadians(angle.toDouble())).toFloat() + paint.textSize / 3f
+                canvas.drawText("x${multiplicadores[i]}", cx, cy, paint)
+            }
+
+            canvas.restore()
+
+            // Dibujar la flecha dorada fija en la parte superior
+            val arrowPath = Path()
+            val arrowHeight = 60f
+            val arrowWidth = 40f
+            val centerX = width / 2f
+            val topY = rect.top - arrowHeight / 2f
+            arrowPath.moveTo(centerX, topY) // punta
+            arrowPath.lineTo(centerX - arrowWidth / 2f, topY + arrowHeight)
+            arrowPath.lineTo(centerX + arrowWidth / 2f, topY + arrowHeight)
+            arrowPath.close()
+            paint.style = Paint.Style.FILL
+            paint.color = colorBorde
+            canvas.drawPath(arrowPath, paint)
+        }
+
+        fun girarA(sector: Int, onEnd: (Int) -> Unit) {
+            val start = rotationAngle
+            // 4 vueltas completas = 1440°
+            val vueltas = 1440f
+            val extra = sector * sectorAngle
+            val animator = ValueAnimator.ofFloat(start, start + vueltas + extra)
+            animator.duration = 3000
+            animator.interpolator = DecelerateInterpolator()
+            animator.addUpdateListener {
+                rotationAngle = (it.animatedValue as Float) % 360f
+                invalidate()
+            }
+            animator.addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    rotationAngle = (start + vueltas + extra) % 360f
+                    invalidate()
+                    onEnd(sector)
+                }
+            })
+            animator.start()
+        }
     }
 
     // ---------- RASCA ----------
@@ -193,7 +315,7 @@ class MainActivity : AppCompatActivity() {
                 tv.textSize = 32f
                 tv.gravity = Gravity.CENTER
                 tv.setTextColor(Color.WHITE)
-                tv.setBackgroundDrawable(crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3))
+                tv.background = crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3)
                 val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 params.setMargins(8, 8, 8, 8)
                 tv.layoutParams = params
@@ -238,13 +360,13 @@ class MainActivity : AppCompatActivity() {
         val tvJugador = TextView(this)
         tvJugador.text = "Jugador: "
         tvJugador.setTextColor(Color.WHITE)
-        tvJugador.setBackgroundDrawable(crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3))
+        tvJugador.background = crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3)
         tvJugador.setPadding(16, 16, 16, 16)
 
         val tvBanca = TextView(this)
         tvBanca.text = "Banca: "
         tvBanca.setTextColor(Color.WHITE)
-        tvBanca.setBackgroundDrawable(crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3))
+        tvBanca.background = crearFondoRedondeado(colorFondoClaro, strokeColor = colorDorado, strokeWidth = 3)
         tvBanca.setPadding(16, 16, 16, 16)
 
         val btnRepartir = crearBoton("Repartir", View.OnClickListener {
